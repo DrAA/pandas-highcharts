@@ -9,7 +9,8 @@ _pd2hc_kind = {
     "barh": "bar",
     "area": "area",
     "line": "line",
-    "pie": "pie"
+    "pie": "pie",
+    "scatter": "scatter",
 }
 
 
@@ -85,7 +86,14 @@ def serialize(df, output_type="javascript", chart_type="default", *args, **kwarg
         pass
 
     def serialize_plotOptions(df, output, *args, **kwargs):
-        pass
+        if kwargs.get("kind") == 'scatter':
+            output['plotOptions'] = {
+                'scatter': {
+                    'marker': {
+                        'radius': 4,
+                    }
+                }
+            }
 
     def serialize_series(df, output, *args, **kwargs):
         def is_secondary(c, **kwargs):
@@ -102,6 +110,9 @@ def serialize(df, output_type="javascript", chart_type="default", *args, **kwarg
                     "yAxis": int(sec),
                     "data": list(zip(df.index, data.values.tolist()))
                 }
+                if kwargs.get('color'):
+                    if kwargs['color'].get(d['name']):
+                        d['color'] = kwargs['color'][d['name']]
                 if kwargs.get('polar'):
                     d['data'] = [v for k, v in d['data']]
                 if kwargs.get("kind") == "area" and kwargs.get("stacked", True):
@@ -201,6 +212,18 @@ def serialize(df, output_type="javascript", chart_type="default", *args, **kwarg
     serialize_xAxis(df_copy, output, *args, **kwargs)
     serialize_yAxis(df_copy, output, *args, **kwargs)
     serialize_zoom(df_copy, output, *args, **kwargs)
+
+    if False: ## AA DEBUG
+        from IPython.display import display, HTML  ## AA debug
+        output_clean = output.copy()
+        series_clean = []
+        for s in output_clean['series']:
+            s_clean = s.copy()
+            s_clean.pop('data')
+            series_clean.append(s_clean)
+        output_clean['series'] = series_clean
+        display(output_clean)
+
     if output_type == "dict":
         return output
     if output_type == "json":

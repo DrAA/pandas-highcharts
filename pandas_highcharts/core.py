@@ -157,24 +157,36 @@ def serialize(df, output_type="javascript", chart_type="default", *args, **kwarg
             output["xAxis"]["tickPositions"] = kwargs["xticks"]
 
     def serialize_yAxis(df, output, *args, **kwargs):
-        yAxis = {}
-        if kwargs.get("grid"):
-            yAxis["gridLineWidth"] = 1
-            yAxis["gridLineDashStyle"] = "Dot"
-        if kwargs.get("loglog") or kwargs.get("logy"):
-            yAxis["type"] = 'logarithmic'
-        if "ylim" in kwargs:
-            yAxis["min"] = kwargs["ylim"][0]
-            yAxis["max"] = kwargs["ylim"][1]
-        if "rot" in kwargs:
-            yAxis["labels"] = {"rotation": kwargs["rot"]}
-        if "fontsize" in kwargs:
-            yAxis.setdefault("labels", {})["style"] = {"fontSize": kwargs["fontsize"]}
-        if "yticks" in kwargs:
-            yAxis["tickPositions"] = kwargs["yticks"]
-        output["yAxis"] = [yAxis]
+
+        def config_axis(*args, **kwargs):
+            yAxis = {}
+            if kwargs.get("grid"):
+                yAxis["gridLineWidth"] = 1
+                yAxis["gridLineDashStyle"] = "Dot"
+            if kwargs.get("loglog") or kwargs.get("logy"):
+                yAxis["type"] = 'logarithmic'
+            if "ylim" in kwargs:
+                yAxis["min"] = kwargs["ylim"][0]
+                yAxis["max"] = kwargs["ylim"][1]
+            if "rot" in kwargs:
+                yAxis["labels"] = {"rotation": kwargs["rot"]}
+            if "fontsize" in kwargs:
+                yAxis.setdefault("labels", {})["style"] = {"fontSize": kwargs["fontsize"]}
+            if "yticks" in kwargs:
+                yAxis["tickPositions"] = kwargs["yticks"]
+            if "ylabel" in kwargs:
+                yAxis["title"] = {"text": kwargs["ylabel"]}
+            return yAxis
+
+        output["yAxis"] = [config_axis(*args, **kwargs)]
         if kwargs.get("secondary_y"):
-            yAxis2 = copy.deepcopy(yAxis)
+            kwargs2 = copy.deepcopy(kwargs)
+            for arg in ['ylim', 'rot', 'yticks', 'ylabel', 'loglog', 'logy']:
+                if arg in kwargs2:
+                    del kwargs2[arg]
+                if arg + '2' in kwargs:
+                    kwargs2[arg] = kwargs[arg + '2']
+            yAxis2 = config_axis(*args, **kwargs2)
             yAxis2["opposite"] = True
             output["yAxis"].append(yAxis2)
 
@@ -213,7 +225,7 @@ def serialize(df, output_type="javascript", chart_type="default", *args, **kwarg
     serialize_yAxis(df_copy, output, *args, **kwargs)
     serialize_zoom(df_copy, output, *args, **kwargs)
 
-    if False: ## AA DEBUG
+    if True: ## AA DEBUG
         from IPython.display import display, HTML  ## AA debug
         output_clean = output.copy()
         series_clean = []

@@ -123,6 +123,8 @@ def serialize(df, output_type="javascript", chart_type="default", *args, **kwarg
                         d['color'] = kwargs['color'][d['name']]
                 if kwargs.get('polar'):
                     d['data'] = [v for k, v in d['data']]
+                if kwargs.get("linewidth"):
+                    d["lineWidth"] = kwargs["linewidth"].get(name, 2)
                 if kwargs.get("style"):
                     d["dashStyle"] = pd2hc_linestyle(kwargs["style"].get(name, "-"))
                 output["series"].append(d)

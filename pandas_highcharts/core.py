@@ -118,17 +118,16 @@ def serialize(df, output_type="javascript", chart_type="default", *args, **kwarg
                     d["data"] = data.values.tolist()
                 else:
                     d["data"] = list(zip(df.index, data.values.tolist()))
-                if kwargs.get('color'):
-                    if kwargs['color'].get(d['name']):
-                        d['color'] = kwargs['color'][d['name']]
+                if kwargs.get('color', {}).get(name):
+                    d['color'] = kwargs['color'][name]
                 if kwargs.get('polar'):
                     d['data'] = [v for k, v in d['data']]
-                if kwargs.get("linetype"):
-                    d["type"] = kwargs["linetype"].get(name, 'line')
-                if kwargs.get("linewidth"):
-                    d["lineWidth"] = kwargs["linewidth"].get(name, 2)
-                if kwargs.get("style"):
-                    d["dashStyle"] = pd2hc_linestyle(kwargs["style"].get(name, "-"))
+                if kwargs.get("linetype", {}).get(name):
+                    d["type"] = kwargs["linetype"][name]
+                if kwargs.get("linewidth", {}).get(name):
+                    d["lineWidth"] = kwargs["linewidth"][name]
+                if kwargs.get("style", {}).get(name):
+                    d["dashStyle"] = pd2hc_linestyle(kwargs["style"][name])
                 output["series"].append(d)
         output['series'].sort(key=lambda s: s['name'])
 

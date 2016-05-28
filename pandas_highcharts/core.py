@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 
-import pandas
 import copy
 
+import pandas
 
 _pd2hc_kind = {
     "bar": "column",
@@ -69,9 +69,7 @@ def serialize(df, output_type="javascript", chart_type="default", *args, **kwarg
         pass
 
     def serialize_legend(df, output, *args, **kwargs):
-        output["legend"] = {
-            "enabled": kwargs.get("legend", True)
-        }
+        pass
 
     def serialize_loading(df, output, *args, **kwargs):
         pass
@@ -86,7 +84,13 @@ def serialize(df, output_type="javascript", chart_type="default", *args, **kwarg
         pass
 
     def serialize_plotOptions(df, output, *args, **kwargs):
-        if kwargs.get("kind") == 'scatter':
+        if kwargs.get("kind") == 'area':
+            output['plotOptions'] = {
+                'area': {
+                    'stacking': 'normal',
+                }
+            }
+        elif kwargs.get("kind") == 'scatter':
             output['plotOptions'] = {
                 'scatter': {
                     'marker': {
@@ -105,18 +109,20 @@ def serialize(df, output_type="javascript", chart_type="default", *args, **kwarg
         for name, data in series.items():
             if df[name].dtype.kind in "biufc":
                 sec = is_secondary(name, **kwargs)
-                d = {
-                    "name": name if not sec or not kwargs.get("mark_right", True) else name + " (right)",
-                    "yAxis": int(sec),
-                    "data": list(zip(df.index, data.values.tolist()))
-                }
+                d = dict(name=name)
+                if sec:
+                    d['yAxis'] = int(sec)
+                    if kwargs.get("mark_right", True):
+                        d['name'] += " (right)"
+                if kwargs.get("kind") == "area":
+                    d["data"] = data.values.tolist()
+                else:
+                    d["data"] = list(zip(df.index, data.values.tolist()))
                 if kwargs.get('color'):
                     if kwargs['color'].get(d['name']):
                         d['color'] = kwargs['color'][d['name']]
                 if kwargs.get('polar'):
                     d['data'] = [v for k, v in d['data']]
-                if kwargs.get("kind") == "area" and kwargs.get("stacked", True):
-                    d["stacking"] = 'normal'
                 if kwargs.get("style"):
                     d["dashStyle"] = pd2hc_linestyle(kwargs["style"].get(name, "-"))
                 output["series"].append(d)
@@ -126,8 +132,7 @@ def serialize(df, output_type="javascript", chart_type="default", *args, **kwarg
         pass
 
     def serialize_title(df, output, *args, **kwargs):
-        if "title" in kwargs:
-            output["title"] = {"text": kwargs["title"]}
+        output["title"] = {"text": kwargs.get("title", "")}
 
     def serialize_tooltip(df, output, *args, **kwargs):
         if 'tooltip' in kwargs:
@@ -139,7 +144,7 @@ def serialize(df, output_type="javascript", chart_type="default", *args, **kwarg
             output["xAxis"]["title"] = {"text": df.index.name}
         if df.index.dtype.kind in "M":
             output["xAxis"]["type"] = "datetime"
-        if df.index.dtype.kind == 'O':
+        if df.index.dtype.kind == 'O' or kwargs.get("kind") == 'area':
             output['xAxis']['categories'] = sorted(list(df.index)) if kwargs.get('sort_columns') else list(df.index)
         if kwargs.get("grid"):
             output["xAxis"]["gridLineWidth"] = 1
@@ -174,8 +179,7 @@ def serialize(df, output_type="javascript", chart_type="default", *args, **kwarg
                 yAxis.setdefault("labels", {})["style"] = {"fontSize": kwargs["fontsize"]}
             if "yticks" in kwargs:
                 yAxis["tickPositions"] = kwargs["yticks"]
-            if "ylabel" in kwargs:
-                yAxis["title"] = {"text": kwargs["ylabel"]}
+            yAxis["title"] = {"text": kwargs.get("ylabel", "")}
             return yAxis
 
         output["yAxis"] = [config_axis(*args, **kwargs)]
@@ -225,8 +229,11 @@ def serialize(df, output_type="javascript", chart_type="default", *args, **kwarg
     serialize_yAxis(df_copy, output, *args, **kwargs)
     serialize_zoom(df_copy, output, *args, **kwargs)
 
-    if True: ## AA DEBUG
-        from IPython.display import display, HTML  ## AA debug
+    if kwargs.get("output_fun"):
+        output = kwargs['output_fun'](output)
+
+    if kwargs.get("debug"):
+        from IPython.display import display  ## AA debug
         output_clean = output.copy()
         series_clean = []
         for s in output_clean['series']:

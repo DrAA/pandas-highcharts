@@ -1,15 +1,16 @@
 # -*- coding: utf-8 -*-
 
-import pandas
 import copy
 
+import pandas
 
 _pd2hc_kind = {
     "bar": "column",
     "barh": "bar",
     "area": "area",
     "line": "line",
-    "pie": "pie"
+    "pie": "pie",
+    "scatter": "scatter",
 }
 
 
@@ -68,9 +69,7 @@ def serialize(df, output_type="javascript", chart_type="default", *args, **kwarg
         pass
 
     def serialize_legend(df, output, *args, **kwargs):
-        output["legend"] = {
-            "enabled": kwargs.get("legend", True)
-        }
+        pass
 
     def serialize_loading(df, output, *args, **kwargs):
         pass
@@ -85,7 +84,20 @@ def serialize(df, output_type="javascript", chart_type="default", *args, **kwarg
         pass
 
     def serialize_plotOptions(df, output, *args, **kwargs):
-        pass
+        if kwargs.get("kind") == 'area':
+            output['plotOptions'] = {
+                'area': {
+                    'stacking': 'normal',
+                }
+            }
+        elif kwargs.get("kind") == 'scatter':
+            output['plotOptions'] = {
+                'scatter': {
+                    'marker': {
+                        'radius': 4,
+                    }
+                }
+            }
 
     def serialize_series(df, output, *args, **kwargs):
         def is_secondary(c, **kwargs):
@@ -97,17 +109,25 @@ def serialize(df, output_type="javascript", chart_type="default", *args, **kwarg
         for name, data in series.items():
             if df[name].dtype.kind in "biufc":
                 sec = is_secondary(name, **kwargs)
-                d = {
-                    "name": name if not sec or not kwargs.get("mark_right", True) else name + " (right)",
-                    "yAxis": int(sec),
-                    "data": list(zip(df.index, data.values.tolist()))
-                }
+                d = dict(name=name)
+                if sec:
+                    d['yAxis'] = int(sec)
+                    if kwargs.get("mark_right", True):
+                        d['name'] += " (right)"
+                if kwargs.get("kind") == "area":
+                    d["data"] = data.values.tolist()
+                else:
+                    d["data"] = list(zip(df.index, data.values.tolist()))
+                if kwargs.get('color', {}).get(name):
+                    d['color'] = kwargs['color'][name]
                 if kwargs.get('polar'):
                     d['data'] = [v for k, v in d['data']]
-                if kwargs.get("kind") == "area" and kwargs.get("stacked", True):
-                    d["stacking"] = 'normal'
-                if kwargs.get("style"):
-                    d["dashStyle"] = pd2hc_linestyle(kwargs["style"].get(name, "-"))
+                if kwargs.get("linetype", {}).get(name):
+                    d["type"] = kwargs["linetype"][name]
+                if kwargs.get("linewidth", {}).get(name):
+                    d["lineWidth"] = kwargs["linewidth"][name]
+                if kwargs.get("style", {}).get(name):
+                    d["dashStyle"] = pd2hc_linestyle(kwargs["style"][name])
                 output["series"].append(d)
         output['series'].sort(key=lambda s: s['name'])
 
@@ -115,8 +135,7 @@ def serialize(df, output_type="javascript", chart_type="default", *args, **kwarg
         pass
 
     def serialize_title(df, output, *args, **kwargs):
-        if "title" in kwargs:
-            output["title"] = {"text": kwargs["title"]}
+        output["title"] = {"text": kwargs.get("title", "")}
 
     def serialize_tooltip(df, output, *args, **kwargs):
         if 'tooltip' in kwargs:
@@ -128,7 +147,7 @@ def serialize(df, output_type="javascript", chart_type="default", *args, **kwarg
             output["xAxis"]["title"] = {"text": df.index.name}
         if df.index.dtype.kind in "M":
             output["xAxis"]["type"] = "datetime"
-        if df.index.dtype.kind == 'O':
+        if df.index.dtype.kind == 'O' or kwargs.get("kind") == 'area':
             output['xAxis']['categories'] = sorted(list(df.index)) if kwargs.get('sort_columns') else list(df.index)
         if kwargs.get("grid"):
             output["xAxis"]["gridLineWidth"] = 1
@@ -146,24 +165,35 @@ def serialize(df, output_type="javascript", chart_type="default", *args, **kwarg
             output["xAxis"]["tickPositions"] = kwargs["xticks"]
 
     def serialize_yAxis(df, output, *args, **kwargs):
-        yAxis = {}
-        if kwargs.get("grid"):
-            yAxis["gridLineWidth"] = 1
-            yAxis["gridLineDashStyle"] = "Dot"
-        if kwargs.get("loglog") or kwargs.get("logy"):
-            yAxis["type"] = 'logarithmic'
-        if "ylim" in kwargs:
-            yAxis["min"] = kwargs["ylim"][0]
-            yAxis["max"] = kwargs["ylim"][1]
-        if "rot" in kwargs:
-            yAxis["labels"] = {"rotation": kwargs["rot"]}
-        if "fontsize" in kwargs:
-            yAxis.setdefault("labels", {})["style"] = {"fontSize": kwargs["fontsize"]}
-        if "yticks" in kwargs:
-            yAxis["tickPositions"] = kwargs["yticks"]
-        output["yAxis"] = [yAxis]
+
+        def config_axis(*args, **kwargs):
+            yAxis = {}
+            if kwargs.get("grid"):
+                yAxis["gridLineWidth"] = 1
+                yAxis["gridLineDashStyle"] = "Dot"
+            if kwargs.get("loglog") or kwargs.get("logy"):
+                yAxis["type"] = 'logarithmic'
+            if "ylim" in kwargs:
+                yAxis["min"] = kwargs["ylim"][0]
+                yAxis["max"] = kwargs["ylim"][1]
+            if "rot" in kwargs:
+                yAxis["labels"] = {"rotation": kwargs["rot"]}
+            if "fontsize" in kwargs:
+                yAxis.setdefault("labels", {})["style"] = {"fontSize": kwargs["fontsize"]}
+            if "yticks" in kwargs:
+                yAxis["tickPositions"] = kwargs["yticks"]
+            yAxis["title"] = {"text": kwargs.get("ylabel", "")}
+            return yAxis
+
+        output["yAxis"] = [config_axis(*args, **kwargs)]
         if kwargs.get("secondary_y"):
-            yAxis2 = copy.deepcopy(yAxis)
+            kwargs2 = copy.deepcopy(kwargs)
+            for arg in ['ylim', 'rot', 'yticks', 'ylabel', 'loglog', 'logy']:
+                if arg in kwargs2:
+                    del kwargs2[arg]
+                if arg + '2' in kwargs:
+                    kwargs2[arg] = kwargs[arg + '2']
+            yAxis2 = config_axis(*args, **kwargs2)
             yAxis2["opposite"] = True
             output["yAxis"].append(yAxis2)
 
@@ -201,6 +231,21 @@ def serialize(df, output_type="javascript", chart_type="default", *args, **kwarg
     serialize_xAxis(df_copy, output, *args, **kwargs)
     serialize_yAxis(df_copy, output, *args, **kwargs)
     serialize_zoom(df_copy, output, *args, **kwargs)
+
+    if kwargs.get("output_fun"):
+        output = kwargs['output_fun'](output)
+
+    if kwargs.get("debug"):
+        from IPython.display import display  ## AA debug
+        output_clean = output.copy()
+        series_clean = []
+        for s in output_clean['series']:
+            s_clean = s.copy()
+            s_clean.pop('data')
+            series_clean.append(s_clean)
+        output_clean['series'] = series_clean
+        display(output_clean)
+
     if output_type == "dict":
         return output
     if output_type == "json":
